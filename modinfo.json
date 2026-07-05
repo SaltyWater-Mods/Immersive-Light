@@ -1,0 +1,11 @@
+{
+  "type": "code",
+  "modid": "immersivelight",
+  "name": "Immersive Light",
+  "side" : "universal",
+  "description": "Light that respects walls!",
+  "version": "0.1.0",
+  "authors": [ "SaltyWater" ],
+  "requiredOnClient": true,
+  "requiredOnServer": true
+}
