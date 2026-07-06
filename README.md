@@ -8,7 +8,7 @@ Vintage Story block light normally spreads through nearby blocks in a very gamey
 
 This mod changes that. Light still uses the normal game lighting system, but each block now has to prove it can actually see the light source before it receives direct light.
 
-## TSmall story
+## Small story
 
 I spent a stupid amount of time wrapping my head around ideas like ray tracing, path tracing, bouncing light, custom light volumes etc
 Then the simple solution slapped me in the face. Instead of rewriting light from scratch, the mod lets vanilla do most of its normal block light work, but adds one question: can this block see the light source?
