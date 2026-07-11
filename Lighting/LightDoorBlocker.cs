@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
 using Vintagestory.GameContent;
@@ -51,22 +52,29 @@ namespace ImmersiveLight.Lighting
                 return;
             }
 
-            KickDoorPieces(door, oldAbsorption, newAbsorption);
+            HashSet<BlockPos> positions = new();
+            CollectDoorPieces(door, positions);
 
             BEBehaviorDoor leftDoor = door.LeftDoor;
             if (leftDoor != null && !object.ReferenceEquals(leftDoor, door))
             {
-                KickDoorPieces(leftDoor, oldAbsorption, newAbsorption);
+                CollectDoorPieces(leftDoor, positions);
             }
 
             BEBehaviorDoor rightDoor = door.RightDoor;
             if (rightDoor != null && !object.ReferenceEquals(rightDoor, door) && !object.ReferenceEquals(rightDoor, leftDoor))
             {
-                KickDoorPieces(rightDoor, oldAbsorption, newAbsorption);
+                CollectDoorPieces(rightDoor, positions);
+            }
+
+            foreach (BlockPos pos in positions)
+            {
+                // paired doors can point back to the same pieces collect them first or it kick the same light twice
+                door.Api.World.BlockAccessor.MarkAbsorptionChanged(oldAbsorption, newAbsorption, pos);
             }
         }
 
-        private static void KickDoorPieces(BEBehaviorDoor door, int oldAbsorption, int newAbsorption)
+        private static void CollectDoorPieces(BEBehaviorDoor door, HashSet<BlockPos> positions)
         {
             if (door?.Api == null || door.doorBh == null)
             {
@@ -77,8 +85,7 @@ namespace ImmersiveLight.Lighting
             {
                 if (DoorPieceCanBlockRay(door, pos))
                 {
-                    // vanilla still thinks the door is absorption zero this fake number is just me poking block light until it admits it moved
-                    door.Api.World.BlockAccessor.MarkAbsorptionChanged(oldAbsorption, newAbsorption, pos.Copy());
+                    positions.Add(pos.Copy());
                 }
 
                 return true;

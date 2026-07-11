@@ -30,6 +30,8 @@ namespace ImmersiveLight.Lighting
             int[] currentVisited = ChunkIlluminatorAccess.CurrentVisited(illuminator);
             BlockPos tmpPos = new(Dimensions.WillSetLater);
             BlockPos rayPos = new(Dimensions.WillSetLater);
+            LightBlockerKind[] blockerKinds = LightBlockerCache.Get(blockTypes);
+            sbyte[] visibility = new sbyte[currentVisited.Length];
 
             Block block = LightWorld.GetBlock(chunkProvider, blockTypes, chunkSize, posX, posY, posZ);
             if (block == null)
@@ -109,7 +111,17 @@ namespace ImmersiveLight.Lighting
                     int nextBright = spreadBright;
 
                     // the normal path only lights the block when it can see back to the source n visited is marked after this check so a bad route does not poison the block forever
-                    bool sourceVisible = LightRay.CanSeeSource(chunkProvider, readBlockAccess, blockTypes, chunkSize, sourceX, sourceY, sourceZ, nx, ny, nz, rayPos);
+                    sbyte visibilityState = visibility[visitedIndex];
+                    bool sourceVisible;
+                    if (visibilityState == 0)
+                    {
+                        sourceVisible = LightRay.CanSeeSource(chunkProvider, readBlockAccess, blockTypes, blockerKinds, chunkSize, sourceX, sourceY, sourceZ, nx, ny, nz, rayPos);
+                        visibility[visitedIndex] = sourceVisible ? (sbyte)1 : (sbyte)-1;
+                    }
+                    else
+                    {
+                        sourceVisible = visibilityState > 0;
+                    }
 
                     if (!sourceVisible)
                     {

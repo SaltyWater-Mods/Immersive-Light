@@ -8,18 +8,16 @@ namespace ImmersiveLight.Patches
     [HarmonyPatch(typeof(ChunkIlluminator), nameof(ChunkIlluminator.UpdateSunLight))]
     internal static class FakeBlockerBlockLightPatch
     {
-        private static void Postfix(ChunkIlluminator __instance, int posX, int posY, int posZ, int oldAbsorb, int newAbsorb, FastSetOfLongs __result)
+        private static bool Prefix(ChunkIlluminator __instance, int posX, int posY, int posZ, int oldAbsorb, int newAbsorb, ref FastSetOfLongs __result)
         {
             if (!LightDoorBlocker.IsFakeBlockerAbsorptionChange(oldAbsorb, newAbsorb))
             {
-                return;
+                return true;
             }
 
-            // markabsorptionchanged only makes vanilla run the sunlight half, doors and trapdoors need block light too or placing one just redraws the wood
-            foreach (long chunkIndex in __instance.UpdateBlockLight(oldAbsorb, newAbsorb, posX, posY, posZ))
-            {
-                __result.Add(chunkIndex);
-            }
+            // fake absorption here because the hitbox moved sunlight didnt actually change
+            __result = __instance.UpdateBlockLight(oldAbsorb, newAbsorb, posX, posY, posZ);
+            return false;
         }
     }
 }
