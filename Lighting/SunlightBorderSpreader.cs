@@ -27,6 +27,7 @@ namespace ImmersiveLight.Lighting
         {
             int chunkSize = ChunkIlluminatorAccess.ChunkSize(illuminator);
             int ambientCeiling = SunlightSpreader.GetAmbientCeiling(illuminator);
+            int bounceCeiling = SunlightSpreader.GetBounceCeiling(illuminator);
             IChunkProvider chunkProvider = ChunkIlluminatorAccess.ChunkProvider(illuminator);
             IBlockAccessor blockAccess = ChunkIlluminatorAccess.BlockAccessor(illuminator);
             IList<Block> blockTypes = ChunkIlluminatorAccess.BlockTypes(illuminator);
@@ -53,6 +54,13 @@ namespace ImmersiveLight.Lighting
                 Stack<SunlightSpreader.SunlightSeed> stack
             )
             {
+                bool fromSurface = SunlightRay.UsesDirectionalSunlight(blockAccess, chunkSize, fromX, y, fromZ);
+                bool toSurface = SunlightRay.UsesDirectionalSunlight(blockAccess, chunkSize, toX, y, toZ);
+                if (SunlightRay.IsScheduledRelight && (!fromSurface || !toSurface))
+                {
+                    return false;
+                }
+
                 int spreadLight = fromChunk.Lighting.GetSunlight(fromIndex) - 1;
                 if (spreadLight <= 0)
                 {
@@ -66,11 +74,13 @@ namespace ImmersiveLight.Lighting
                     return false;
                 }
 
-                bool direct = SunlightRay.CanSeeSun(chunkProvider, blockAccess, blockTypes, chunkSize, fromX, y, fromZ, tmpPos)
+                bool fromDirect = toSurface && fromSurface
+                    && SunlightRay.CanSeeSun(chunkProvider, blockAccess, blockTypes, chunkSize, fromX, y, fromZ, tmpPos);
+                bool direct = fromDirect
                     && SunlightRay.CanSeeSun(chunkProvider, blockAccess, blockTypes, chunkSize, toX, y, toZ, tmpPos);
-                if (!direct)
+                if (toSurface && !direct)
                 {
-                    spreadLight = Math.Min(spreadLight, ambientCeiling);
+                    spreadLight = Math.Min(spreadLight, fromDirect ? bounceCeiling : ambientCeiling);
                 }
 
                 if (spreadLight <= currentLight)
@@ -88,8 +98,14 @@ namespace ImmersiveLight.Lighting
             {
                 int dx = facing.Normali.X;
                 int dz = facing.Normali.Z;
+                int lowestChunkY = SunlightRay.IsScheduledRelight
+                    ? Math.Min(
+                        SunlightRay.GetLowestSurfaceChunk(blockAccess.GetMapChunk(chunkX, chunkZ), chunkSize),
+                        SunlightRay.GetLowestSurfaceChunk(blockAccess.GetMapChunk(chunkX + dx, chunkZ + dz), chunkSize)
+                    )
+                    : 0;
                 bool loaded = true;
-                for (int cy = 0; cy < currentChunks.Length; cy++)
+                for (int cy = lowestChunkY; cy < currentChunks.Length; cy++)
                 {
                     neighbourChunks[cy] = chunkProvider.GetChunk(chunkX + dx, cy, chunkZ + dz);
                     if (neighbourChunks[cy] == null)
@@ -114,7 +130,7 @@ namespace ImmersiveLight.Lighting
                 int neighbourLx = dx > 0 ? 0 : chunkSize - 1;
                 int neighbourLz = dz > 0 ? 0 : chunkSize - 1;
 
-                for (int cy = chunkY; cy >= 0; cy--)
+                for (int cy = chunkY; cy >= lowestChunkY; cy--)
                 {
                     IWorldChunk ownChunk = currentChunks[cy];
                     IWorldChunk neighbourChunk = neighbourChunks[cy];

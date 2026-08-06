@@ -28,6 +28,12 @@ namespace ImmersiveLight.Patches
             }
 
             IBlockAccessor blockAccessor = ChunkIlluminatorAccess.BlockAccessor(__instance);
+            int chunkSize = ChunkIlluminatorAccess.ChunkSize(__instance);
+            if (!SunlightRay.UsesDirectionalSunlight(blockAccessor, chunkSize, posX, posY, posZ))
+            {
+                return true;
+            }
+
             tmpPos ??= new BlockPos(Dimensions.NormalWorld);
             tmpPos.Set(posX, posY, posZ);
 
@@ -35,7 +41,7 @@ namespace ImmersiveLight.Patches
                 ChunkIlluminatorAccess.ChunkProvider(__instance),
                 blockAccessor,
                 ChunkIlluminatorAccess.BlockTypes(__instance),
-                ChunkIlluminatorAccess.ChunkSize(__instance),
+                chunkSize,
                 posX,
                 posY,
                 posZ,

@@ -56,15 +56,6 @@ namespace ImmersiveLight.Lighting
             {
                 if (work == DirectionalSunlightWork.Prepare)
                 {
-                    // start light buffering before clearing so tessellation cant see the column half rebuilt
-                    for (int y = 0; y < chunks.Length; y++)
-                    {
-                        int sunlight = chunks[y].Lighting.GetSunlight(0);
-                        chunks[y].Lighting.SetSunlight_Buffered(0, sunlight);
-                        chunks[y].Lighting.ClearAllSunlight();
-                    }
-
-                    illuminator.Sunlight(chunks, job.ChunkX, chunks.Length - 1, job.ChunkZ, Dimensions.NormalWorld);
                     DirectionalSunlightSeeder.Apply(illuminator, chunks, job.ChunkX, job.ChunkZ, job.PhaseDays);
                     illuminator.SunlightFlood(chunks, job.ChunkX, chunks.Length - 1, job.ChunkZ);
                     byte spreadFaces = illuminator.SunLightFloodNeighbourChunks(chunks, job.ChunkX, chunks.Length - 1, job.ChunkZ, Dimensions.NormalWorld);
@@ -109,12 +100,6 @@ namespace ImmersiveLight.Lighting
             {
                 if (work == DirectionalSunlightWork.Prepare)
                 {
-                    for (int y = 0; y < chunks.Length; y++)
-                    {
-                        chunks[y].Lighting.ClearAllSunlight();
-                    }
-
-                    system.chunkIlluminator.Sunlight(chunks, job.ChunkX, chunks.Length - 1, job.ChunkZ, Dimensions.NormalWorld);
                     DirectionalSunlightSeeder.Apply(system.chunkIlluminator, chunks, job.ChunkX, job.ChunkZ, job.PhaseDays);
                     system.chunkIlluminator.SunlightFlood(chunks, job.ChunkX, chunks.Length - 1, job.ChunkZ);
                     system.chunkIlluminator.SunLightFloodNeighbourChunks(chunks, job.ChunkX, chunks.Length - 1, job.ChunkZ, Dimensions.NormalWorld);
@@ -253,7 +238,8 @@ namespace ImmersiveLight.Lighting
 
         private static void AddColumn(ClientWorldMap worldMap, HashSet<long> chunks, int chunkX, int chunkZ, int height)
         {
-            for (int y = 0; y < height; y++)
+            int lowestChunkY = SunlightRay.GetLowestSurfaceChunk(worldMap.GetMapChunk(chunkX, chunkZ), GlobalConstants.ChunkSize);
+            for (int y = lowestChunkY; y < height; y++)
             {
                 if (worldMap.IsValidChunkPos(chunkX, y, chunkZ) && worldMap.GetChunk(chunkX, y, chunkZ) != null)
                 {

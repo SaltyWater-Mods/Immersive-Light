@@ -37,7 +37,13 @@ namespace ImmersiveLight.Lighting
             while (stack.Count > 0)
             {
                 BlockPos pos = stack.Pop();
-                bool direct = SunlightRay.CanSeeSun(chunkProvider, blockAccess, blockTypes, chunkSize, pos.X, pos.InternalY, pos.Z, tmpPos);
+                bool surface = SunlightRay.UsesDirectionalSunlight(blockAccess, chunkSize, pos.X, pos.InternalY, pos.Z);
+                if (SunlightRay.IsScheduledRelight && !surface)
+                {
+                    continue;
+                }
+
+                bool direct = surface && SunlightRay.CanSeeSun(chunkProvider, blockAccess, blockTypes, chunkSize, pos.X, pos.InternalY, pos.Z, tmpPos);
                 columnQueue.Enqueue(new SunNode(pos.X, pos.InternalY, pos.Z, direct));
             }
 
@@ -58,7 +64,13 @@ namespace ImmersiveLight.Lighting
             while (stack.Count > 0)
             {
                 SunlightSeed seed = stack.Pop();
-                bool direct = SunlightRay.CanSeeSun(chunkProvider, blockAccess, blockTypes, chunkSize, seed.X, seed.Y, seed.Z, tmpPos);
+                bool surface = SunlightRay.UsesDirectionalSunlight(blockAccess, chunkSize, seed.X, seed.Y, seed.Z);
+                if (SunlightRay.IsScheduledRelight && !surface)
+                {
+                    continue;
+                }
+
+                bool direct = surface && SunlightRay.CanSeeSun(chunkProvider, blockAccess, blockTypes, chunkSize, seed.X, seed.Y, seed.Z, tmpPos);
                 columnQueue.Enqueue(new SunNode(seed.X, seed.Y, seed.Z, direct));
             }
 
@@ -69,6 +81,7 @@ namespace ImmersiveLight.Lighting
         {
             int chunkSize = ChunkIlluminatorAccess.ChunkSize(illuminator);
             int ambientCeiling = GetAmbientCeiling(illuminator);
+            int bounceCeiling = GetBounceCeiling(illuminator);
             int mapSizeX = ChunkIlluminatorAccess.MapSizeX(illuminator);
             int mapSizeY = ChunkIlluminatorAccess.MapSizeY(illuminator);
             int mapSizeZ = ChunkIlluminatorAccess.MapSizeZ(illuminator);
@@ -94,8 +107,15 @@ namespace ImmersiveLight.Lighting
                 int x = (packed & 0xFF) - 128 + centerPos.X;
                 int y = (packed >> 8 & 0xFF) - 128 + centerPos.Y;
                 int z = (packed >> 16 & 0xFF) - 128 + centerPos.Z;
-                bool direct = SunlightRay.CanSeeSun(chunkProvider, blockAccess, blockTypes, chunkSize, x, y, z, tmpPos);
-                EnqueueRuntime(new RuntimeSunNode(x, y, z, direct ? light : Math.Min(light, ambientCeiling), direct), mapSizeX, mapSizeZ);
+                bool surface = SunlightRay.UsesDirectionalSunlight(blockAccess, chunkSize, x, y, z);
+                if (SunlightRay.IsScheduledRelight && !surface)
+                {
+                    continue;
+                }
+
+                bool direct = surface && SunlightRay.CanSeeSun(chunkProvider, blockAccess, blockTypes, chunkSize, x, y, z, tmpPos);
+                int nextLight = !surface || direct ? light : Math.Min(light, bounceCeiling);
+                EnqueueRuntime(new RuntimeSunNode(x, y, z, nextLight, direct), mapSizeX, mapSizeZ);
             }
 
             while (runtimeQueue.Count > 0)
@@ -133,6 +153,12 @@ namespace ImmersiveLight.Lighting
                         continue;
                     }
 
+                    bool surface = SunlightRay.UsesDirectionalSunlight(blockAccess, chunkSize, nx, ny, nz);
+                    if (SunlightRay.IsScheduledRelight && !surface)
+                    {
+                        continue;
+                    }
+
                     int spreadLight = node.Light - absorption - (isDirectlyIlluminated && nx == centerPos.X && nz == centerPos.Z && i == BlockFacing.indexDOWN ? 0 : 1);
                     if (spreadLight <= 0)
                     {
@@ -153,10 +179,10 @@ namespace ImmersiveLight.Lighting
                         continue;
                     }
 
-                    bool direct = node.Direct && SunlightRay.CanSeeSun(chunkProvider, blockAccess, blockTypes, chunkSize, nx, ny, nz, tmpPos);
-                    if (!direct)
+                    bool direct = surface && node.Direct && SunlightRay.CanSeeSun(chunkProvider, blockAccess, blockTypes, chunkSize, nx, ny, nz, tmpPos);
+                    if (surface && !direct)
                     {
-                        spreadLight = Math.Min(spreadLight, ambientCeiling);
+                        spreadLight = Math.Min(spreadLight, node.Direct ? bounceCeiling : ambientCeiling);
                     }
 
                     if (currentLight < spreadLight)
@@ -173,9 +199,17 @@ namespace ImmersiveLight.Lighting
             return Math.Max(1, ChunkIlluminatorAccess.DefaultSunLight(illuminator) / 8);
         }
 
+        internal static int GetBounceCeiling(ChunkIlluminator illuminator)
+        {
+            int sunlight = ChunkIlluminatorAccess.DefaultSunLight(illuminator);
+            // 3 or less big nono (to fix cave music under trees)
+            return Math.Min(sunlight, Math.Max(4, sunlight / 4));
+        }
+
         private static void SpreadColumnQueue(ChunkIlluminator illuminator, IWorldChunk[] chunks, int chunkSize, IChunkProvider chunkProvider, IBlockAccessor blockAccess, IList<Block> blockTypes)
         {
             int ambientCeiling = GetAmbientCeiling(illuminator);
+            int bounceCeiling = GetBounceCeiling(illuminator);
             int mapSizeY = ChunkIlluminatorAccess.MapSizeY(illuminator);
 
             while (columnQueue.Count > 0)
@@ -208,6 +242,12 @@ namespace ImmersiveLight.Lighting
                         continue;
                     }
 
+                    bool surface = SunlightRay.UsesDirectionalSunlight(blockAccess, chunkSize, nx, ny, nz);
+                    if (SunlightRay.IsScheduledRelight && !surface)
+                    {
+                        continue;
+                    }
+
                     IWorldChunk nextChunk = chunks[ny / chunkSize];
                     if (nextChunk != chunk)
                     {
@@ -220,8 +260,10 @@ namespace ImmersiveLight.Lighting
                         continue;
                     }
 
-                    bool direct = node.Direct && SunlightRay.CanSeeSun(chunkProvider, blockAccess, blockTypes, chunkSize, nx, ny, nz, tmpPos);
-                    int nextLight = direct ? spreadLight : Math.Min(spreadLight, ambientCeiling);
+                    bool direct = surface && node.Direct && SunlightRay.CanSeeSun(chunkProvider, blockAccess, blockTypes, chunkSize, nx, ny, nz, tmpPos);
+                    int nextLight = !surface || direct
+                        ? spreadLight
+                        : Math.Min(spreadLight, node.Direct ? bounceCeiling : ambientCeiling);
                     if (currentLight >= nextLight)
                     {
                         continue;

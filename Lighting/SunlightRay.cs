@@ -15,6 +15,9 @@ namespace ImmersiveLight.Lighting
         private static Dictionary<long, Vec3f> directionCache;
 
         [ThreadStatic]
+        private static Dictionary<long, int> terrainHeightCache;
+
+        [ThreadStatic]
         private static IList<Block> cachedBlockTypes;
 
         [ThreadStatic]
@@ -29,6 +32,10 @@ namespace ImmersiveLight.Lighting
         [ThreadStatic]
         private static double passPhaseDays;
 
+        // block updates call BeginPass() too they must not get the hourly cave cutoff
+        [ThreadStatic]
+        private static bool scheduledRelight;
+
         private const int FullyBlockingLightAbsorption = 32;
         private const double FaceRayNear = 0.2;
         private const double FaceRayFar = 0.8;
@@ -37,17 +44,67 @@ namespace ImmersiveLight.Lighting
         {
             visibilityCache ??= new Dictionary<long, bool>();
             directionCache ??= new Dictionary<long, Vec3f>();
+            terrainHeightCache ??= new Dictionary<long, int>();
             visibilityCache.Clear();
             directionCache.Clear();
+            terrainHeightCache.Clear();
             passActive = true;
             hasPassPhase = phaseDays.HasValue;
             passPhaseDays = phaseDays.GetValueOrDefault();
+            scheduledRelight = phaseDays.HasValue;
         }
 
         internal static void EndPass()
         {
             passActive = false;
             hasPassPhase = false;
+            scheduledRelight = false;
+        }
+
+        internal static bool IsScheduledRelight => scheduledRelight;
+
+        internal static int GetLowestSurfaceChunk(IMapChunk mapChunk, int chunkSize)
+        {
+            ushort[] heights = mapChunk?.WorldGenTerrainHeightMap;
+            if (heights == null)
+            {
+                return 0;
+            }
+
+            int lowest = heights[0];
+            for (int i = 1; i < heights.Length; i++)
+            {
+                lowest = Math.Min(lowest, heights[i]);
+            }
+
+            return lowest / chunkSize;
+        }
+
+        internal static bool UsesDirectionalSunlight(IBlockAccessor blockAccess, int chunkSize, int x, int y, int z)
+        {
+            if (x < 0 || z < 0 || x >= blockAccess.MapSizeX || z >= blockAccess.MapSizeZ)
+            {
+                return false;
+            }
+
+            long key = MapUtil.Index2dL(x, z, blockAccess.MapSizeX);
+            if (!passActive || !terrainHeightCache.TryGetValue(key, out int terrainHeight))
+            {
+                ushort[] heights = blockAccess.GetMapChunk(x / chunkSize, z / chunkSize)?.WorldGenTerrainHeightMap;
+                if (heights == null)
+                {
+                    // no heightmap, let vanilla handle it
+                    return false;
+                }
+
+                terrainHeight = heights[z % chunkSize * chunkSize + x % chunkSize];
+                if (passActive)
+                {
+                    terrainHeightCache[key] = terrainHeight;
+                }
+            }
+
+            return y >= terrainHeight;
         }
 
         internal static bool CanSeeSun(IChunkProvider chunkProvider, IBlockAccessor blockAccess, IList<Block> blockTypes, int chunkSize, int x, int y, int z, BlockPos tmpPos)
@@ -199,7 +256,7 @@ namespace ImmersiveLight.Lighting
 
             int mapChunkX = int.MinValue;
             int mapChunkZ = int.MinValue;
-            IMapChunk mapChunk = null;
+            ushort[] rainHeights = null;
             int chunkX = int.MinValue;
             int chunkY = int.MinValue;
             int chunkZ = int.MinValue;
@@ -234,15 +291,16 @@ namespace ImmersiveLight.Lighting
                 {
                     mapChunkX = nextMapChunkX;
                     mapChunkZ = nextMapChunkZ;
-                    mapChunk = blockAccess.GetMapChunk(mapChunkX, mapChunkZ);
-                    if (mapChunk == null)
+                    rainHeights = blockAccess.GetMapChunk(mapChunkX, mapChunkZ)?.RainHeightMap;
+                    if (rainHeights == null)
                     {
+                        // mapchunk can be here before this array
                         return false;
                     }
                 }
 
                 int localIndex = cellZ % chunkSize * chunkSize + cellX % chunkSize;
-                if (cellY > mapChunk.RainHeightMap[localIndex])
+                if (cellY > rainHeights[localIndex])
                 {
                     return true;
                 }
