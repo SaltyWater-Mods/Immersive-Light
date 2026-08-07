@@ -22,12 +22,17 @@ namespace ImmersiveLight.Patches
             ref bool __result
         )
         {
+            IBlockAccessor blockAccessor = ChunkIlluminatorAccess.BlockAccessor(__instance);
+            if (!DirectionalSunlight.IsEnabled(blockAccessor))
+            {
+                return true;
+            }
+
             if (posY >= BlockPos.DimensionBoundary)
             {
                 return true;
             }
 
-            IBlockAccessor blockAccessor = ChunkIlluminatorAccess.BlockAccessor(__instance);
             int chunkSize = ChunkIlluminatorAccess.ChunkSize(__instance);
             if (!SunlightRay.UsesDirectionalSunlight(blockAccessor, chunkSize, posX, posY, posZ))
             {

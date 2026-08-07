@@ -16,6 +16,11 @@ namespace ImmersiveLight.Patches
         [HarmonyPatch(nameof(ChunkIlluminator.SpreadSunLightInColumn))]
         private static bool SpreadInColumnPrefix(ChunkIlluminator __instance, Stack<BlockPos> stack, IWorldChunk[] chunks)
         {
+            if (!DirectionalSunlight.IsEnabled(ChunkIlluminatorAccess.BlockAccessor(__instance)))
+            {
+                return true;
+            }
+
             if (stack.Count == 0 || stack.Peek().dimension != Dimensions.NormalWorld)
             {
                 return true;
@@ -29,6 +34,11 @@ namespace ImmersiveLight.Patches
         [HarmonyPatch(nameof(ChunkIlluminator.SpreadSunlightAt))]
         private static bool SpreadAtPrefix(ChunkIlluminator __instance, QueueOfInt unhandledPositions, BlockPos centerPos, bool isDirectlyIlluminated, FastSetOfLongs touchedChunks)
         {
+            if (!DirectionalSunlight.IsEnabled(ChunkIlluminatorAccess.BlockAccessor(__instance)))
+            {
+                return true;
+            }
+
             if (centerPos.dimension != Dimensions.NormalWorld)
             {
                 return true;
@@ -42,6 +52,11 @@ namespace ImmersiveLight.Patches
         [HarmonyPatch(nameof(ChunkIlluminator.SunLightFloodNeighbourChunks))]
         private static bool SpreadBordersPrefix(ChunkIlluminator __instance, IWorldChunk[] curChunks, int chunkX, int chunkY, int chunkZ, int dimension, ref byte __result)
         {
+            if (!DirectionalSunlight.IsEnabled(ChunkIlluminatorAccess.BlockAccessor(__instance)))
+            {
+                return true;
+            }
+
             if (dimension != Dimensions.NormalWorld)
             {
                 return true;
