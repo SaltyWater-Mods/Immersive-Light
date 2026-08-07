@@ -31,6 +31,11 @@ namespace ImmersiveLight.Lighting
 
         internal static void ProcessClient(ClientSystemRelight system, ClientMain game)
         {
+            if (!DirectionalSunlight.IsEnabled(EnumAppSide.Client))
+            {
+                return;
+            }
+
             lock (game.WorldMap.LightingTasksLock)
             {
                 if (game.WorldMap.LightingTasks.Count > 0)
@@ -76,6 +81,11 @@ namespace ImmersiveLight.Lighting
 
         internal static void ProcessServer(ServerSystemRelight system, ServerMain server)
         {
+            if (!DirectionalSunlight.IsEnabled(EnumAppSide.Server))
+            {
+                return;
+            }
+
             lock (server.WorldMap.LightingTasksLock)
             {
                 if (server.WorldMap.LightingTasks.Count > 0)

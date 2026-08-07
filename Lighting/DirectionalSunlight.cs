@@ -52,6 +52,8 @@ namespace ImmersiveLight.Lighting
         private static readonly Queue<DirectionalSunlightJob> ClientFloodColumns = new();
         private static readonly Queue<DirectionalSunlightJob> ServerPrepareColumns = new();
         private static readonly Queue<DirectionalSunlightJob> ServerFloodColumns = new();
+        private static bool clientEnabled;
+        private static bool serverEnabled;
 
         // calendar and relight run on different threads publish hour as one value so relight thread cant mixx phase fields
         private static PhaseState clientState;
@@ -62,6 +64,12 @@ namespace ImmersiveLight.Lighting
 
         internal static void UpdatePhase(IWorldAccessor world)
         {
+            bool client = world.Side == EnumAppSide.Client;
+            if (!IsEnabled(client))
+            {
+                return;
+            }
+
             IGameCalendar calendar = world.Calendar;
             IBlockAccessor blockAccessor = world.BlockAccessor;
             if (calendar == null || blockAccessor == null)
@@ -70,7 +78,6 @@ namespace ImmersiveLight.Lighting
             }
 
             int nextPhase = (int)Math.Floor(calendar.TotalHours);
-            bool client = world.Side == EnumAppSide.Client;
             PhaseState state = GetState(client);
             if (state?.Phase == nextPhase)
             {
@@ -124,6 +131,39 @@ namespace ImmersiveLight.Lighting
                     ));
                 }
             }
+        }
+
+        internal static void Configure(EnumAppSide side, bool enabled)
+        {
+            bool client = side == EnumAppSide.Client;
+            lock (QueueLock)
+            {
+                if (client)
+                {
+                    Volatile.Write(ref clientEnabled, enabled);
+                    ClientPrepareColumns.Clear();
+                    ClientFloodColumns.Clear();
+                }
+                else
+                {
+                    Volatile.Write(ref serverEnabled, enabled);
+                    ServerPrepareColumns.Clear();
+                    ServerFloodColumns.Clear();
+                }
+
+                SetState(client, null);
+            }
+        }
+
+        internal static bool IsEnabled(IBlockAccessor blockAccessor)
+        {
+            IWorldAccessor world = ChunkIlluminatorAccess.WorldAccessor((BlockAccessorBase)blockAccessor);
+            return IsEnabled(world.Side == EnumAppSide.Client);
+        }
+
+        internal static bool IsEnabled(EnumAppSide side)
+        {
+            return IsEnabled(side == EnumAppSide.Client);
         }
 
         internal static Vec3f GetSunDirection(IBlockAccessor blockAccessor, int x, int y, int z)
@@ -220,19 +260,19 @@ namespace ImmersiveLight.Lighting
 
         internal static bool IsCurrentClient(DirectionalSunlightJob job)
         {
-            return GetState(true)?.Generation == job.Generation;
+            return IsEnabled(true) && GetState(true)?.Generation == job.Generation;
         }
 
         internal static bool IsCurrentServer(DirectionalSunlightJob job)
         {
-            return GetState(false)?.Generation == job.Generation;
+            return IsEnabled(false) && GetState(false)?.Generation == job.Generation;
         }
 
         internal static void QueueClientFlood(DirectionalSunlightJob job)
         {
             lock (QueueLock)
             {
-                if (GetState(true)?.Generation == job.Generation)
+                if (IsEnabled(true) && GetState(true)?.Generation == job.Generation)
                 {
                     ClientFloodColumns.Enqueue(job);
                 }
@@ -243,7 +283,7 @@ namespace ImmersiveLight.Lighting
         {
             lock (QueueLock)
             {
-                if (GetState(false)?.Generation == job.Generation)
+                if (IsEnabled(false) && GetState(false)?.Generation == job.Generation)
                 {
                     ServerFloodColumns.Enqueue(job);
                 }
@@ -253,6 +293,11 @@ namespace ImmersiveLight.Lighting
         private static PhaseState GetState(bool client)
         {
             return client ? Volatile.Read(ref clientState) : Volatile.Read(ref serverState);
+        }
+
+        private static bool IsEnabled(bool client)
+        {
+            return client ? Volatile.Read(ref clientEnabled) : Volatile.Read(ref serverEnabled);
         }
 
         private static void SetState(bool client, PhaseState state)

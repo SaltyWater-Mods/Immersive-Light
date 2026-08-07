@@ -11,10 +11,15 @@ namespace ImmersiveLight.Patches
     {
         private static bool Prefix(ChunkIlluminator __instance, int posX, int posY, int posZ, int oldAbsorb, int newAbsorb, ref FastSetOfLongs __result, out bool __state)
         {
-            __state = !LightDoorBlocker.IsFakeBlockerAbsorptionChange(oldAbsorb, newAbsorb);
+            bool updateSunlight = !LightDoorBlocker.IsFakeBlockerAbsorptionChange(oldAbsorb, newAbsorb);
+            __state = updateSunlight && DirectionalSunlight.IsEnabled(ChunkIlluminatorAccess.BlockAccessor(__instance));
             if (__state)
             {
                 SunlightRay.BeginPass();
+            }
+
+            if (updateSunlight)
+            {
                 return true;
             }
 
