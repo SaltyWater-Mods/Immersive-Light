@@ -4,7 +4,7 @@
   "name": "Immersive Light",
   "side" : "universal",
   "description": "Light that respects walls!",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "authors": [ "SaltyWater" ],
   "requiredOnClient": true,
   "requiredOnServer": true
